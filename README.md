@@ -143,6 +143,17 @@ With `PROBE_NUM_UARTS>1` (paired layout, up to 4 pairs). Header pin numbers are 
 | 2 | GP10 (19) | GP9 (21) | GP11 (23) | GP25 (22) | GP8 (24) | 20, 25 | PIO |
 | 3 | GP19 (35) | GP26 (37) | GP16 (36) | GP20 (38) | GP21 (40) | 39 | PIO |
 
+On the host, the 4 SWD + 4 UART build looks like this (`<serial>` is the probe's USB serial number):
+
+| Pair | OpenOCD `cmsis-dap usb interface` | GDB port in the example below | UART `/dev/serial/by-id/` | UART udev link |
+|------|-----|------|-----------------------------------------------|-------------------------|
+| 0 | 0 | 3333 | `usb-Raspberry_Pi_Debugprobe_on_RP2350-PiZero__CM_<serial>-if01` | `/dev/debugprobe-uart0` |
+| 1 | 4 | 3334 | `usb-Raspberry_Pi_Debugprobe_on_RP2350-PiZero__CM_<serial>-if07` | `/dev/debugprobe-uart1` |
+| 2 | 5 | 3335 | `usb-Raspberry_Pi_Debugprobe_on_RP2350-PiZero__CM_<serial>-if09` | `/dev/debugprobe-uart2` |
+| 3 | 6 | 3336 | `usb-Raspberry_Pi_Debugprobe_on_RP2350-PiZero__CM_<serial>-if0b` | `/dev/debugprobe-uart3` |
+
+The udev links need the rules from [Stable serial port names](#stable-serial-port-names-linux).
+
 With `PROBE_NUM_UARTS=1` (SWD-only layout, up to 9 channels), the UART is on GP14 (8) / GP15 (10), the Raspberry Pi console pins:
 
 | Channel | SWCLK | SWDIO | nRESET |
@@ -170,17 +181,27 @@ Interface 3 is the reset interface. With only one SWD channel or one UART, the n
 
 ### OpenOCD
 
-To attach OpenOCD to a channel, select the USB interface with `cmsis-dap usb interface`. Give every instance its own GDB/telnet/TCL ports:
+SWD channels have no `/dev` node. OpenOCD opens the probe over USB and picks the channel with `cmsis-dap usb interface <n>`:
+
+| Build | SWD channel 0 / 1 / 2 / 3 | UART 0 / 1 / 2 / 3 (`by-id` suffix) |
+|-------|---------------------------|-------------------------------------|
+| 3 SWD + 3 UART (Pico) | 0 / 4 / 5 / - | `if01` / `if06` / `if08` / - |
+| 4 SWD + 4 UART (Pico 2, RP2350-PiZero) | 0 / 4 / 5 / 6 | `if01` / `if07` / `if09` / `if0b` |
+
+Run one OpenOCD per channel, each with its own GDB/telnet/TCL ports. Also select the probe with `adapter serial`. Other CMSIS-DAP probes, such as a Raspberry Pi Debug Probe, use the same USB VID:PID, so OpenOCD may otherwise open the wrong one. The serial number is shown by `lsusb -v -d 2e8a:000c | grep iSerial` and in the `/dev/serial/by-id/` names.
 ```bash
-# channel 0
-openocd -f interface/cmsis-dap.cfg -c "cmsis-dap usb interface 0" \
-        -f target/rp2040.cfg -c "adapter speed 5000"
-# channel 1, in a second terminal
-openocd -f interface/cmsis-dap.cfg -c "cmsis-dap usb interface 4" \
-        -c "gdb_port 3334; telnet_port 4445; tcl_port 6667" \
-        -f target/rp2040.cfg -c "adapter speed 5000"
+SERIAL=<serial>
+# one per terminal; use the target config for your chip
+openocd -f interface/cmsis-dap.cfg -c "adapter serial $SERIAL" -c "cmsis-dap usb interface 0" \
+        -f target/rp2040.cfg -c "adapter speed 5000" -c "gdb_port 3333; telnet_port 4444; tcl_port 6666"
+openocd -f interface/cmsis-dap.cfg -c "adapter serial $SERIAL" -c "cmsis-dap usb interface 4" \
+        -f target/rp2040.cfg -c "adapter speed 5000" -c "gdb_port 3334; telnet_port 4445; tcl_port 6667"
+openocd -f interface/cmsis-dap.cfg -c "adapter serial $SERIAL" -c "cmsis-dap usb interface 5" \
+        -f target/rp2040.cfg -c "adapter speed 5000" -c "gdb_port 3335; telnet_port 4446; tcl_port 6668"
+openocd -f interface/cmsis-dap.cfg -c "adapter serial $SERIAL" -c "cmsis-dap usb interface 6" \
+        -f target/rp2040.cfg -c "adapter speed 5000" -c "gdb_port 3336; telnet_port 4447; tcl_port 6669"
 ```
-If more than one probe is connected, also add `-c "adapter serial <serial>"`.
+GDB then connects to the channel's port, e.g. `target extended-remote :3334` for channel 1. Each target also needs a GND connection to the probe.
 
 ### Stable serial port names (Linux)
 
