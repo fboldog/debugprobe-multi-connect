@@ -186,12 +186,12 @@ If more than one probe is connected, also add `-c "adapter serial <serial>"`.
 
 The UARTs show up as `/dev/ttyACM*` in no particular order. The `/dev/serial/by-id/*-if<NN>` names include the interface number. Alternatively, udev rules such as these (e.g. in `/etc/udev/rules.d/99-debugprobe.rules`) match on the interface string:
 ```
-SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000c", ATTRS{interface}=="CDC-ACM UART Interface 0", SYMLINK+="debugprobe-uart0"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000c", ATTRS{interface}=="CDC-ACM UART Interface 1", SYMLINK+="debugprobe-uart1"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000c", ATTRS{interface}=="CDC-ACM UART Interface 2", SYMLINK+="debugprobe-uart2"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000c", ATTRS{interface}=="CDC-ACM UART Interface 3", SYMLINK+="debugprobe-uart3"
+SUBSYSTEM=="tty", ENV{ID_VENDOR_ID}=="2e8a", ENV{ID_MODEL_ID}=="000c", ATTRS{interface}=="CDC-ACM UART Interface 0", SYMLINK+="debugprobe-uart0"
+SUBSYSTEM=="tty", ENV{ID_VENDOR_ID}=="2e8a", ENV{ID_MODEL_ID}=="000c", ATTRS{interface}=="CDC-ACM UART Interface 1", SYMLINK+="debugprobe-uart1"
+SUBSYSTEM=="tty", ENV{ID_VENDOR_ID}=="2e8a", ENV{ID_MODEL_ID}=="000c", ATTRS{interface}=="CDC-ACM UART Interface 2", SYMLINK+="debugprobe-uart2"
+SUBSYSTEM=="tty", ENV{ID_VENDOR_ID}=="2e8a", ENV{ID_MODEL_ID}=="000c", ATTRS{interface}=="CDC-ACM UART Interface 3", SYMLINK+="debugprobe-uart3"
 ```
-With several probes attached, add `ATTRS{serial}=="<serial>"` and use a per-probe link name.
+Vendor and product are matched with `ENV{...}`, because udev requires all `ATTRS{...}` keys of a rule to match on the same parent device, and `interface` and `idVendor` sit on different ones. With several probes attached, add `ENV{ID_SERIAL_SHORT}=="<serial>"` and use a per-probe link name.
 
 ### Throughput
 
