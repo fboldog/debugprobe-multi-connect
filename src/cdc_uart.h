@@ -30,6 +30,10 @@ void cdc_thread(void *ptr);
 void cdc_uart_init(void);
 bool cdc_task(void);
 
+#include <hardware/uart.h>
+/* True if one of the target UARTs uses this hardware UART */
+bool cdc_uart_hw_in_use(uart_inst_t *hw);
+
 extern TaskHandle_t uart_taskhandle;
 
 #endif

@@ -1,0 +1,61 @@
+;
+; SPDX-License-Identifier: MIT
+;
+; 8N1 UART on PIO, for target UARTs beyond the hardware UARTs.
+; Both programs run at 8 PIO cycles per bit: clkdiv = clk_sys / (8 * baud).
+
+.program uart_tx
+.side_set 1 opt
+; OUT pin and side-set pin are both the TX pin. Data is the LSB byte of each FIFO word.
+    pull       side 1 [7]   ; Stop bit, or idle high while waiting for data
+    set x, 7   side 0 [7]   ; Start bit for 8 cycles
+bitloop:
+    out pins, 1             ; One data bit, LSB first
+    jmp x-- bitloop   [6]   ; 8 cycles per bit
+
+.program uart_rx
+; IN pin and JMP pin are both the RX pin. Received byte is in bits 31:24 of each FIFO word.
+start:
+    wait 0 pin 0            ; Wait for start bit
+    set x, 7          [10]  ; Sample in the middle of the first data bit
+bitloop:
+    in pins, 1
+    jmp x-- bitloop   [6]
+    jmp pin good_stop       ; Stop bit must be high
+    wait 1 pin 0            ; Framing error or break: drop it, wait for idle
+    jmp start
+good_stop:
+    push noblock            ; Drop data rather than lose bit sync if the FIFO is full
+
+% c-sdk {
+static inline void uart_tx_program_init(PIO pio, uint sm, uint offset, uint pin_tx, float div) {
+    // Idle high, output
+    pio_sm_set_pins_with_mask(pio, sm, 1u << pin_tx, 1u << pin_tx);
+    pio_sm_set_pindirs_with_mask(pio, sm, 1u << pin_tx, 1u << pin_tx);
+    pio_gpio_init(pio, pin_tx);
+
+    pio_sm_config c = uart_tx_program_get_default_config(offset);
+    sm_config_set_out_shift(&c, true, false, 32);
+    sm_config_set_out_pins(&c, pin_tx, 1);
+    sm_config_set_sideset_pins(&c, pin_tx);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+    sm_config_set_clkdiv(&c, div);
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void uart_rx_program_init(PIO pio, uint sm, uint offset, uint pin_rx, float div) {
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_rx, 1, false);
+    pio_gpio_init(pio, pin_rx);
+    gpio_pull_up(pin_rx);
+
+    pio_sm_config c = uart_rx_program_get_default_config(offset);
+    sm_config_set_in_pins(&c, pin_rx);
+    sm_config_set_jmp_pin(&c, pin_rx);
+    sm_config_set_in_shift(&c, true, false, 32);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+    sm_config_set_clkdiv(&c, div);
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

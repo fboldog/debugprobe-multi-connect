@@ -73,7 +73,9 @@ enum
   ITF_NUM_CDC_COM,
   ITF_NUM_CDC_DATA,
   ITF_NUM_RESET,
-  ITF_NUM_TOTAL
+  ITF_NUM_PROBE_EXTRA, // SWD channels 1..PROBE_NUM_CHANNELS-1
+  ITF_NUM_CDC_EXTRA = ITF_NUM_PROBE_EXTRA + PROBE_NUM_CHANNELS - 1, // UARTs 1..PROBE_NUM_UARTS-1, two interfaces each
+  ITF_NUM_TOTAL = ITF_NUM_CDC_EXTRA + 2 * (PROBE_NUM_UARTS - 1)
 };
 
 #define CDC_NOTIFICATION_EP_NUM 0x81
@@ -82,11 +84,42 @@ enum
 #define DAP_OUT_EP_NUM 0x04
 #define DAP_IN_EP_NUM 0x85
 
+// SWD channel n (n >= 1) uses OUT/IN endpoint pair number 5 + n, i.e. EP6..EP15
+#define DAP_EXTRA_EP_NUM(n) (5 + (n))
+// String descriptor index for channel n (n >= 1), following the fixed strings
+#define STRID_PROBE_EXTRA(n) (7 + (n))
+
+#define DAP_EXTRA_DESCRIPTOR(n) \
+  TUD_VENDOR_DESCRIPTOR(ITF_NUM_PROBE_EXTRA + (n) - 1, STRID_PROBE_EXTRA(n), \
+                        DAP_EXTRA_EP_NUM(n), 0x80 | DAP_EXTRA_EP_NUM(n), 64)
+
+// UART n (n >= 1): data endpoint pair and notification IN endpoint after the DAP channels' endpoints
+#define CDC_EXTRA_DATA_EP_NUM(n)  (5 + PROBE_NUM_CHANNELS + 2 * ((n) - 1))
+#define CDC_EXTRA_NOTIF_EP_NUM(n) (CDC_EXTRA_DATA_EP_NUM(n) + 1)
+#define STRID_CDC_EXTRA(n) (7 + (PROBE_NUM_CHANNELS - 1) + (n))
+
+#define CDC_EXTRA_DESCRIPTOR(n) \
+  TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_EXTRA + 2 * ((n) - 1), STRID_CDC_EXTRA(n), \
+                     0x80 | CDC_EXTRA_NOTIF_EP_NUM(n), 64, \
+                     CDC_EXTRA_DATA_EP_NUM(n), 0x80 | CDC_EXTRA_DATA_EP_NUM(n), 64)
+
 #if (PROBE_DEBUG_PROTOCOL == PROTO_DAP_V1)
 #define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_INOUT_DESC_LEN)
+#define CDC_DESC_OFFSET   (TUD_CONFIG_DESC_LEN + TUD_HID_INOUT_DESC_LEN)
 #else
-#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_VENDOR_DESC_LEN + TUD_RPI_RESET_DESC_LEN)
+#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_VENDOR_DESC_LEN + TUD_RPI_RESET_DESC_LEN + \
+                           (PROBE_NUM_CHANNELS - 1) * TUD_VENDOR_DESC_LEN + (PROBE_NUM_UARTS - 1) * TUD_CDC_DESC_LEN)
+#define CDC_DESC_OFFSET   (TUD_CONFIG_DESC_LEN + TUD_VENDOR_DESC_LEN)
 #endif
+
+int usb_dap_channel_for_itf(uint8_t itf)
+{
+  if (itf == ITF_NUM_PROBE)
+    return 0;
+  if (itf >= ITF_NUM_PROBE_EXTRA && itf < ITF_NUM_TOTAL)
+    return itf - ITF_NUM_PROBE_EXTRA + 1;
+  return -1;
+}
 
 static uint8_t const desc_hid_report[] =
 {
@@ -117,7 +150,71 @@ uint8_t desc_configuration[] =
   TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_COM, 6, CDC_NOTIFICATION_EP_NUM, 64, CDC_DATA_OUT_EP_NUM, CDC_DATA_IN_EP_NUM, 64),
   // Reset interface
   TUD_RPI_RESET_DESCRIPTOR(ITF_NUM_RESET, 7),
+  // Additional SWD channels
+#if PROBE_NUM_CHANNELS > 1
+  DAP_EXTRA_DESCRIPTOR(1),
+#endif
+#if PROBE_NUM_CHANNELS > 2
+  DAP_EXTRA_DESCRIPTOR(2),
+#endif
+#if PROBE_NUM_CHANNELS > 3
+  DAP_EXTRA_DESCRIPTOR(3),
+#endif
+#if PROBE_NUM_CHANNELS > 4
+  DAP_EXTRA_DESCRIPTOR(4),
+#endif
+#if PROBE_NUM_CHANNELS > 5
+  DAP_EXTRA_DESCRIPTOR(5),
+#endif
+#if PROBE_NUM_CHANNELS > 6
+  DAP_EXTRA_DESCRIPTOR(6),
+#endif
+#if PROBE_NUM_CHANNELS > 7
+  DAP_EXTRA_DESCRIPTOR(7),
+#endif
+#if PROBE_NUM_CHANNELS > 8
+  DAP_EXTRA_DESCRIPTOR(8),
+#endif
+#if PROBE_NUM_CHANNELS > 9
+  DAP_EXTRA_DESCRIPTOR(9),
+#endif
+#if PROBE_NUM_CHANNELS > 10
+  DAP_EXTRA_DESCRIPTOR(10),
+#endif
+  // Additional UARTs
+#if PROBE_NUM_UARTS > 1
+  CDC_EXTRA_DESCRIPTOR(1),
+#endif
+#if PROBE_NUM_UARTS > 2
+  CDC_EXTRA_DESCRIPTOR(2),
+#endif
+#if PROBE_NUM_UARTS > 3
+  CDC_EXTRA_DESCRIPTOR(3),
+#endif
+#if PROBE_NUM_UARTS > 4
+  CDC_EXTRA_DESCRIPTOR(4),
+#endif
+#if PROBE_NUM_UARTS > 5
+  CDC_EXTRA_DESCRIPTOR(5),
+#endif
+#if PROBE_NUM_UARTS > 6
+  CDC_EXTRA_DESCRIPTOR(6),
+#endif
+#if PROBE_NUM_UARTS > 7
+  CDC_EXTRA_DESCRIPTOR(7),
+#endif
+#if PROBE_NUM_UARTS > 8
+  CDC_EXTRA_DESCRIPTOR(8),
+#endif
+#if PROBE_NUM_UARTS > 9
+  CDC_EXTRA_DESCRIPTOR(9),
+#endif
+#if PROBE_NUM_UARTS > 10
+  CDC_EXTRA_DESCRIPTOR(10),
+#endif
 };
+
+TU_VERIFY_STATIC(sizeof(desc_configuration) == CONFIG_TOTAL_LEN, "Incorrect configuration descriptor size");
 
 // Invoked when received GET CONFIGURATION DESCRIPTOR
 // Application return pointer to descriptor
@@ -126,7 +223,7 @@ uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 {
   (void) index; // for multiple configurations
   /* Hack in CAP_BREAK support */
-  desc_configuration[CONFIG_TOTAL_LEN - TUD_RPI_RESET_DESC_LEN - TUD_CDC_DESC_LEN + 8 + 9 + 5 + 5 + 4 - 1] = 0x6;
+  desc_configuration[CDC_DESC_OFFSET + 8 + 9 + 5 + 5 + 4 - 1] = 0x6;
   return desc_configuration;
 }
 
@@ -142,9 +239,79 @@ char const* string_desc_arr [] =
   PROBE_PRODUCT_STRING, // 2: Product
   usb_serial,     // 3: Serial, uses flash unique ID
   "CMSIS-DAP v1 Interface", // 4: Interface descriptor for HID transport
+#if PROBE_NUM_CHANNELS > 1
+  "CMSIS-DAP v2 Interface 0", // 5: Interface descriptor for Bulk transport, SWD channel 0
+#else
   "CMSIS-DAP v2 Interface", // 5: Interface descriptor for Bulk transport
+#endif
+#if PROBE_NUM_UARTS > 1
+  "CDC-ACM UART Interface 0", // 6: Interface descriptor for CDC, UART 0
+#else
   "CDC-ACM UART Interface", // 6: Interface descriptor for CDC
+#endif
   "Reset", // 7: Interface descriptor for Reset
+  // 8+: SWD channels 1..n-1. Must contain "CMSIS-DAP" for host tools to recognise them.
+#if PROBE_NUM_CHANNELS > 1
+  "CMSIS-DAP v2 Interface 1",
+#endif
+#if PROBE_NUM_CHANNELS > 2
+  "CMSIS-DAP v2 Interface 2",
+#endif
+#if PROBE_NUM_CHANNELS > 3
+  "CMSIS-DAP v2 Interface 3",
+#endif
+#if PROBE_NUM_CHANNELS > 4
+  "CMSIS-DAP v2 Interface 4",
+#endif
+#if PROBE_NUM_CHANNELS > 5
+  "CMSIS-DAP v2 Interface 5",
+#endif
+#if PROBE_NUM_CHANNELS > 6
+  "CMSIS-DAP v2 Interface 6",
+#endif
+#if PROBE_NUM_CHANNELS > 7
+  "CMSIS-DAP v2 Interface 7",
+#endif
+#if PROBE_NUM_CHANNELS > 8
+  "CMSIS-DAP v2 Interface 8",
+#endif
+#if PROBE_NUM_CHANNELS > 9
+  "CMSIS-DAP v2 Interface 9",
+#endif
+#if PROBE_NUM_CHANNELS > 10
+  "CMSIS-DAP v2 Interface 10",
+#endif
+  // Then UARTs 1..n-1
+#if PROBE_NUM_UARTS > 1
+  "CDC-ACM UART Interface 1",
+#endif
+#if PROBE_NUM_UARTS > 2
+  "CDC-ACM UART Interface 2",
+#endif
+#if PROBE_NUM_UARTS > 3
+  "CDC-ACM UART Interface 3",
+#endif
+#if PROBE_NUM_UARTS > 4
+  "CDC-ACM UART Interface 4",
+#endif
+#if PROBE_NUM_UARTS > 5
+  "CDC-ACM UART Interface 5",
+#endif
+#if PROBE_NUM_UARTS > 6
+  "CDC-ACM UART Interface 6",
+#endif
+#if PROBE_NUM_UARTS > 7
+  "CDC-ACM UART Interface 7",
+#endif
+#if PROBE_NUM_UARTS > 8
+  "CDC-ACM UART Interface 8",
+#endif
+#if PROBE_NUM_UARTS > 9
+  "CDC-ACM UART Interface 9",
+#endif
+#if PROBE_NUM_UARTS > 10
+  "CDC-ACM UART Interface 10",
+#endif
 };
 
 static uint16_t _desc_str[32];
@@ -204,7 +371,7 @@ https://developers.google.com/web/fundamentals/native-hardware/build-for-webusb/
 (Section Microsoft OS compatibility descriptors)
 */
 #define MS_OS_FEATURE_DESC_LEN 0xA0
-#define MS_OS_20_DESC_LEN  (0x0A + 0x08 + MS_OS_FEATURE_DESC_LEN + RPI_RESET_MS_OS_20_DESC_LEN)
+#define MS_OS_20_DESC_LEN  (0x0A + 0x08 + PROBE_NUM_CHANNELS * MS_OS_FEATURE_DESC_LEN + RPI_RESET_MS_OS_20_DESC_LEN)
 
 #define BOS_TOTAL_LEN      (TUD_BOS_DESC_LEN + TUD_BOS_MICROSOFT_OS_DESC_LEN)
 
@@ -217,6 +384,25 @@ uint8_t const desc_bos[] =
   TUD_BOS_MS_OS_20_DESCRIPTOR(MS_OS_20_DESC_LEN, 1)
 };
 
+// WinUSB function subset for one CMSIS-DAP v2 interface
+#define MS_OS_20_DAP_FUNCTION(itf) \
+  /* Function Subset header: length, type, first interface, reserved, subset length */ \
+  U16_TO_U8S_LE(0x0008), U16_TO_U8S_LE(MS_OS_20_SUBSET_HEADER_FUNCTION), (itf), 0, U16_TO_U8S_LE(MS_OS_FEATURE_DESC_LEN), \
+  /* MS OS 2.0 Compatible ID descriptor: length, type, compatible ID, sub compatible ID */ \
+  U16_TO_U8S_LE(0x0014), U16_TO_U8S_LE(MS_OS_20_FEATURE_COMPATBLE_ID), 'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00, \
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* sub-compatible */ \
+  /* MS OS 2.0 Registry property descriptor: length, type */ \
+  U16_TO_U8S_LE(MS_OS_FEATURE_DESC_LEN-0x08-0x14), U16_TO_U8S_LE(MS_OS_20_FEATURE_REG_PROPERTY), \
+  U16_TO_U8S_LE(0x0007), U16_TO_U8S_LE(0x002A), /* wPropertyDataType, wPropertyNameLength and PropertyName "DeviceInterfaceGUIDs\0" in UTF-16 */ \
+  'D', 0x00, 'e', 0x00, 'v', 0x00, 'i', 0x00, 'c', 0x00, 'e', 0x00, 'I', 0x00, 'n', 0x00, 't', 0x00, 'e', 0x00, \
+  'r', 0x00, 'f', 0x00, 'a', 0x00, 'c', 0x00, 'e', 0x00, 'G', 0x00, 'U', 0x00, 'I', 0x00, 'D', 0x00, 's', 0x00, 0x00, 0x00, \
+  U16_TO_U8S_LE(0x0050), /* wPropertyDataLength */ \
+  /* bPropertyData "{CDB3B5AD-293B-4663-AA36-1AAE46463776}" as a UTF-16 string (b doesn't mean bytes) */ \
+  '{', 0x00, 'C', 0x00, 'D', 0x00, 'B', 0x00, '3', 0x00, 'B', 0x00, '5', 0x00, 'A', 0x00, 'D', 0x00, '-', 0x00, \
+  '2', 0x00, '9', 0x00, '3', 0x00, 'B', 0x00, '-', 0x00, '4', 0x00, '6', 0x00, '6', 0x00, '3', 0x00, '-', 0x00, \
+  'A', 0x00, 'A', 0x00, '3', 0x00, '6', 0x00, '-', 0x00, '1', 0x00, 'A', 0x00, 'A', 0x00, 'E', 0x00, '4', 0x00, \
+  '6', 0x00, '4', 0x00, '6', 0x00, '3', 0x00, '7', 0x00, '7', 0x00, '6', 0x00, '}', 0x00, 0x00, 0x00, 0x00, 0x00
+
 uint8_t const desc_ms_os_20[] =
 {
   // Set header: length, type, windows version, total length
@@ -225,24 +411,37 @@ uint8_t const desc_ms_os_20[] =
   // Configuration subset header: length, type, configuration index, reserved, configuration total length
   U16_TO_U8S_LE(0x0008), U16_TO_U8S_LE(MS_OS_20_SUBSET_HEADER_CONFIGURATION), 0, 0, U16_TO_U8S_LE(MS_OS_20_DESC_LEN-0x0A),
 
-  // Function Subset header: length, type, first interface, reserved, subset length
-  U16_TO_U8S_LE(0x0008), U16_TO_U8S_LE(MS_OS_20_SUBSET_HEADER_FUNCTION), ITF_NUM_PROBE, 0, U16_TO_U8S_LE(MS_OS_FEATURE_DESC_LEN),
-
-  // MS OS 2.0 Compatible ID descriptor: length, type, compatible ID, sub compatible ID
-  U16_TO_U8S_LE(0x0014), U16_TO_U8S_LE(MS_OS_20_FEATURE_COMPATBLE_ID), 'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // sub-compatible
-
-  // MS OS 2.0 Registry property descriptor: length, type
-  U16_TO_U8S_LE(MS_OS_FEATURE_DESC_LEN-0x08-0x14), U16_TO_U8S_LE(MS_OS_20_FEATURE_REG_PROPERTY),
-  U16_TO_U8S_LE(0x0007), U16_TO_U8S_LE(0x002A), // wPropertyDataType, wPropertyNameLength and PropertyName "DeviceInterfaceGUIDs\0" in UTF-16
-  'D', 0x00, 'e', 0x00, 'v', 0x00, 'i', 0x00, 'c', 0x00, 'e', 0x00, 'I', 0x00, 'n', 0x00, 't', 0x00, 'e', 0x00,
-  'r', 0x00, 'f', 0x00, 'a', 0x00, 'c', 0x00, 'e', 0x00, 'G', 0x00, 'U', 0x00, 'I', 0x00, 'D', 0x00, 's', 0x00, 0x00, 0x00,
-  U16_TO_U8S_LE(0x0050), // wPropertyDataLength
-  // bPropertyData "{CDB3B5AD-293B-4663-AA36-1AAE46463776}" as a UTF-16 string (b doesn't mean bytes)
-  '{', 0x00, 'C', 0x00, 'D', 0x00, 'B', 0x00, '3', 0x00, 'B', 0x00, '5', 0x00, 'A', 0x00, 'D', 0x00, '-', 0x00,
-  '2', 0x00, '9', 0x00, '3', 0x00, 'B', 0x00, '-', 0x00, '4', 0x00, '6', 0x00, '6', 0x00, '3', 0x00, '-', 0x00,
-  'A', 0x00, 'A', 0x00, '3', 0x00, '6', 0x00, '-', 0x00, '1', 0x00, 'A', 0x00, 'A', 0x00, 'E', 0x00, '4', 0x00,
-  '6', 0x00, '4', 0x00, '6', 0x00, '3', 0x00, '7', 0x00, '7', 0x00, '6', 0x00, '}', 0x00, 0x00, 0x00, 0x00, 0x00,
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE),
+#if PROBE_NUM_CHANNELS > 1
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 0),
+#endif
+#if PROBE_NUM_CHANNELS > 2
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 1),
+#endif
+#if PROBE_NUM_CHANNELS > 3
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 2),
+#endif
+#if PROBE_NUM_CHANNELS > 4
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 3),
+#endif
+#if PROBE_NUM_CHANNELS > 5
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 4),
+#endif
+#if PROBE_NUM_CHANNELS > 6
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 5),
+#endif
+#if PROBE_NUM_CHANNELS > 7
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 6),
+#endif
+#if PROBE_NUM_CHANNELS > 8
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 7),
+#endif
+#if PROBE_NUM_CHANNELS > 9
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 8),
+#endif
+#if PROBE_NUM_CHANNELS > 10
+  MS_OS_20_DAP_FUNCTION(ITF_NUM_PROBE_EXTRA + 9),
+#endif
 
   RPI_RESET_MS_OS_20_DESCRIPTOR(ITF_NUM_RESET)
 };

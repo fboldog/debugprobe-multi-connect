@@ -461,11 +461,7 @@ __STATIC_FORCEINLINE void     PIN_nTRST_OUT  (uint32_t bit) {
 \return Current status of the nRESET DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_nRESET_IN  (void) {
-#ifdef PROBE_PIN_RESET
   return probe_reset_level();
-#else
-  return (0U);
-#endif
 }
 
 /** nRESET I/O pin: Set Output.
@@ -474,11 +470,7 @@ __STATIC_FORCEINLINE uint32_t PIN_nRESET_IN  (void) {
            - 1: release device hardware reset.
 */
 __STATIC_FORCEINLINE void     PIN_nRESET_OUT (uint32_t bit) {
-#ifdef PROBE_PIN_RESET
   probe_assert_reset(!!bit);
-#else
-  (void) bit;
-#endif
 }
 
 ///@}
@@ -503,9 +495,7 @@ It is recommended to provide the following LEDs for status indication:
            - 0: Connect LED OFF: debugger is not connected to CMSIS-DAP Debug Unit.
 */
 __STATIC_INLINE void LED_CONNECTED_OUT (uint32_t bit) {
-#ifdef PROBE_DAP_CONNECTED_LED
-  gpio_put(PROBE_DAP_CONNECTED_LED, bit);
-#endif
+  probe_led_connected(!!bit);
 }
 
 /** Debug Unit: Set status Target Running LED.
@@ -514,9 +504,7 @@ __STATIC_INLINE void LED_CONNECTED_OUT (uint32_t bit) {
            - 0: Target Running LED OFF: program execution in target stopped.
 */
 __STATIC_INLINE void LED_RUNNING_OUT (uint32_t bit) {
-#ifdef PROBE_DAP_RUNNING_LED
-  gpio_put(PROBE_DAP_RUNNING_LED, bit);
-#endif
+  probe_led_running(!!bit);
 }
 
 ///@}

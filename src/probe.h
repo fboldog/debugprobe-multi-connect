@@ -49,4 +49,11 @@ void probe_deinit(void);
 void probe_assert_reset(bool state);
 int probe_reset_level(void);
 
+/* Multi-channel support */
+void probe_channels_init(void);
+void probe_select_channel(uint idx);
+uint probe_current_channel(void);
+void probe_led_connected(bool on);
+void probe_led_running(bool on);
+
 #endif

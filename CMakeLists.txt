@@ -24,6 +24,7 @@ add_executable(debugprobe
         src/sw_dp_pio.c
         src/tusb_edpt_handler.c
         src/autobaud.c
+        src/pio_alloc.c
 )
 
 target_sources(debugprobe PRIVATE
@@ -45,6 +46,7 @@ target_compile_options(debugprobe PRIVATE -Wall)
 pico_generate_pio_header(debugprobe ${CMAKE_CURRENT_LIST_DIR}/src/probe.pio)
 pico_generate_pio_header(debugprobe ${CMAKE_CURRENT_LIST_DIR}/src/probe_oen.pio)
 pico_generate_pio_header(debugprobe ${CMAKE_CURRENT_LIST_DIR}/src/autobaud.pio)
+pico_generate_pio_header(debugprobe ${CMAKE_CURRENT_LIST_DIR}/src/uart_pio.pio)
 
 target_include_directories(debugprobe PRIVATE src)
 
@@ -60,16 +62,43 @@ target_include_directories(debugprobe PRIVATE
 
 add_dependencies(debugprobe version)
 
+# Number of independent SWD channels, each exposed as its own CMSIS-DAP v2 USB interface
+set(PROBE_NUM_CHANNELS 1 CACHE STRING "Number of SWD channels (CMSIS-DAP interfaces)")
+# Number of target UARTs, each exposed as its own CDC-ACM port
+set(PROBE_NUM_UARTS 1 CACHE STRING "Number of target UARTs (CDC-ACM ports)")
+
 target_compile_definitions (debugprobe PRIVATE
 	PICO_RP2040_USB_DEVICE_ENUMERATION_FIX=1
     PICO_ENABLE_USB_RESET_VIA_VENDOR_INTERFACE=1
+    PROBE_NUM_CHANNELS=${PROBE_NUM_CHANNELS}
+    PROBE_NUM_UARTS=${PROBE_NUM_UARTS}
 )
 
-if (NOT PICO_BOARD STREQUAL "debug_probe")
-    set_target_properties(debugprobe PROPERTIES
-        OUTPUT_NAME "debugprobe_on_${PICO_BOARD}"
+# Firmware debug log on the board's default UART (TX only, 115200 8N1):
+# 0 = off, 1 = info, 2 = + debug, 3 = + packet dumps
+set(PROBE_DEBUG_LOG 0 CACHE STRING "Firmware debug log level (0-3)")
+target_compile_definitions (debugprobe PRIVATE PROBE_DEBUG_LOG=${PROBE_DEBUG_LOG})
+
+if (PICO_BOARD STREQUAL "waveshare_rp2350_pizero")
+    # The SDK default (uart1 TX on GP4) clashes with SWD channel 0 nRESET;
+    # put the debug log on GP24 (header pin 18) instead
+    target_compile_definitions (debugprobe PRIVATE
+        PICO_DEFAULT_UART=1
+        PICO_DEFAULT_UART_TX_PIN=24
     )
+endif()
+
+set(PROBE_OUTPUT_NAME "debugprobe")
+if (NOT PICO_BOARD STREQUAL "debug_probe")
+    set(PROBE_OUTPUT_NAME "${PROBE_OUTPUT_NAME}_on_${PICO_BOARD}")
 endif ()
+if (NOT PROBE_NUM_CHANNELS EQUAL 1)
+    set(PROBE_OUTPUT_NAME "${PROBE_OUTPUT_NAME}_${PROBE_NUM_CHANNELS}ch")
+endif ()
+if (NOT PROBE_NUM_UARTS EQUAL 1)
+    set(PROBE_OUTPUT_NAME "${PROBE_OUTPUT_NAME}_${PROBE_NUM_UARTS}uart")
+endif ()
+set_target_properties(debugprobe PROPERTIES OUTPUT_NAME "${PROBE_OUTPUT_NAME}")
 
 target_link_libraries(debugprobe PRIVATE
         pico_multicore
@@ -79,6 +108,7 @@ target_link_libraries(debugprobe PRIVATE
         tinyusb_device
         tinyusb_board
         hardware_pio
+        hardware_uart
         hardware_dma
         hardware_irq
         hardware_clocks

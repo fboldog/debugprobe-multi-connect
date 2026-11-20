@@ -149,12 +149,26 @@ int main(void) {
     bi_decl_config();
 
     board_init();
+    // board_init() (TinyUSB BSP) puts stdio on the default UART's TX and RX
+    // pins. That UART or those pins may belong to a target UART or SWD
+    // channel, so undo it; the debug log is set up below only when free.
+    stdio_uart_deinit_full(PICO_DEFAULT_UART_INSTANCE(), PICO_DEFAULT_UART_TX_PIN,
+                           PICO_DEFAULT_UART_RX_PIN);
+    gpio_set_function(PICO_DEFAULT_UART_TX_PIN, GPIO_FUNC_NULL);
+    gpio_set_function(PICO_DEFAULT_UART_RX_PIN, GPIO_FUNC_NULL);
     usb_serial_init();
     cdc_uart_init();
     tusb_init();
-    stdio_uart_init();
+    // TX-only debug stdio on the board's default UART, unless a target UART
+    // or probe channel needs that UART or its TX pin
+    if (!cdc_uart_hw_in_use(PICO_DEFAULT_UART_INSTANCE()) &&
+        !probe_config_pin_in_use(PICO_DEFAULT_UART_TX_PIN))
+        stdio_uart_init_full(PICO_DEFAULT_UART_INSTANCE(), PICO_DEFAULT_UART_BAUD_RATE,
+                             PICO_DEFAULT_UART_TX_PIN, -1);
 
     DAP_Setup();
+    // Claim PIO resources for all SWD channels and give each a copy of the default DAP state
+    probe_channels_init();
 
     probe_info("Welcome to debugprobe!\n");
 

@@ -30,12 +30,56 @@
 #define PROBE_CDC_UART
 
 // PIO config
-#define PROBE_SM 0
 #define PROBE_PIN_OFFSET 2
 #define PROBE_PIN_SWCLK (PROBE_PIN_OFFSET + 0) // 2
 #define PROBE_PIN_SWDIO (PROBE_PIN_OFFSET + 1) // 3
 // Target reset config
 #define PROBE_PIN_RESET 1
+
+#if PROBE_NUM_UARTS > 1
+/*
+ * Paired layout: SWD channel n and UART n form one block of pins per target.
+ * UART 0 and 1 use the hardware UARTs, UART 2 and 3 run on PIO.
+ * Up to 4 pairs (RP2040: 3 pairs, limited by PIO state machines).
+ *
+ *        SWCLK SWDIO RESET  UART TX  UART RX
+ * pair 0:  GP2   GP3   GP1    GP4      GP5    (uart1, classic pinout)
+ * pair 1:  GP9   GP10  GP11   GP12     GP13   (uart0)
+ * pair 2:  GP14  GP15  GP16   GP17     GP18   (PIO)
+ * pair 3:  GP19  GP20  GP21   GP22     GP26   (PIO)
+ */
+#define PROBE_CHANNEL_PINS { \
+    PROBE_PINS(PROBE_PIN_SWCLK, PROBE_PIN_SWDIO, -1, -1, PROBE_PIN_RESET), \
+    PROBE_PINS( 9, 10, -1, -1, 11), \
+    PROBE_PINS(14, 15, -1, -1, 16), \
+    PROBE_PINS(19, 20, -1, -1, 21), \
+}
+#define PROBE_UART_PIN_TABLE { \
+    PROBE_LEGACY_UART, \
+    PROBE_UART(12, 13), \
+    PROBE_UART(17, 18), \
+    PROBE_UART(22, 26), \
+}
+#else
+/*
+ * SWD-only layout: as many SWD channels as possible, with the single UART on
+ * GP4/GP5. Channel 0 keeps the classic pinout; the first PROBE_NUM_CHANNELS
+ * entries are used. GPIO 0/1 (stdio UART), 4/5 (target UART) and 23/24/25
+ * (Pico power/VBUS/LED) are avoided.
+ *
+ *                 SWCLK            SWDIO            SWDI SWDIOEN RESET
+ */
+#define PROBE_CHANNEL_PINS { \
+    PROBE_PINS(PROBE_PIN_SWCLK, PROBE_PIN_SWDIO, -1, -1, PROBE_PIN_RESET), /* ch0 */ \
+    PROBE_PINS( 6,  7, -1, -1,  8), /* ch1 */ \
+    PROBE_PINS( 9, 10, -1, -1, 11), /* ch2 */ \
+    PROBE_PINS(12, 13, -1, -1, 14), /* ch3 */ \
+    PROBE_PINS(16, 17, -1, -1, 18), /* ch4 */ \
+    PROBE_PINS(19, 20, -1, -1, 21), /* ch5 */ \
+    PROBE_PINS(22, 26, -1, -1, 27), /* ch6 */ \
+    PROBE_PINS(15, 28, -1, -1, -1), /* ch7 (RP2350 only: needs a 3rd PIO) */ \
+}
+#endif
 
 // UART config
 #define PROBE_UART_TX 4

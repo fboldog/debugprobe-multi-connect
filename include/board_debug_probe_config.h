@@ -31,7 +31,6 @@
 // No reset pin 
 
 // PIO config
-#define PROBE_SM 0
 #define PROBE_PIN_OFFSET 12
 #define PROBE_PIN_SWCLK (PROBE_PIN_OFFSET + 0)
 // For level-shifted input.

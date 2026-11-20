@@ -44,7 +44,6 @@
 /* Target reset GPIO (active-low). Omit if not used.*/
 #define PROBE_PIN_RESET 1
 
-#define PROBE_SM 0
 #define PROBE_PIN_OFFSET 12
 /* PIO config for PROBE_IO_RAW */
 #if defined(PROBE_IO_RAW)

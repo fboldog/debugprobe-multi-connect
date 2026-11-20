@@ -63,7 +63,11 @@
 
 //------------- CLASS -------------//
 #define CFG_TUD_HID             1
-#define CFG_TUD_CDC             1
+// One CDC-ACM instance per target UART (PROBE_NUM_UARTS comes from CMake)
+#ifndef PROBE_NUM_UARTS
+#define PROBE_NUM_UARTS 1
+#endif
+#define CFG_TUD_CDC             PROBE_NUM_UARTS
 #define CFG_TUD_MSC             0
 #define CFG_TUD_MIDI            0
 #define CFG_TUD_VENDOR          1

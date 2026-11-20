@@ -11,6 +11,7 @@
 
 #include "device/usbd_pvt.h"
 #include "DAP_config.h"
+#include "probe_config.h"
 
 #include "pico/usb_reset.h"
 
@@ -27,6 +28,9 @@ typedef struct {
 } buffer_t;
 
 extern TaskHandle_t dap_taskhandle, tud_taskhandle;
+
+/* Map a USB interface number to its SWD channel, or -1 (usb_descriptors.c) */
+int usb_dap_channel_for_itf(uint8_t itf);
 
 /* Main DAP loop */
 void dap_thread(void *ptr);
